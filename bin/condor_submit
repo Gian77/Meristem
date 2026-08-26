@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Route Nextflow-generated worker submissions to the scheduler explicitly.
+# Worker tasks may run on execute nodes without a local schedd. Use -name
+# rather than -remote: -remote implies -spool and can pin execution to the
+# schedd host, which is not an execute node in this pool.
+set -euo pipefail
+
+REMOTE_SCHEDD="${MERISTEM_CONDOR_SCHEDD:-scarcity-ap-1.glbrc.org}"
+
+# The Nextflow head runs on the submit host, where the local schedd should be
+# used. Worker tasks use the named schedd from their execute nodes.
+if [[ "$(hostname -f)" == "${REMOTE_SCHEDD}" ]]; then
+    exec /usr/bin/condor_submit "$@"
+fi
+
+exec /usr/bin/condor_submit -name "${REMOTE_SCHEDD}" "$@"

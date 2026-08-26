@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "https://example.org/meristem/annotation-schema.json",
+  "title": "Meristem plant genome annotation",
+  "type": "object",
+  "properties": {
+    "input": {"type": "string", "description": "CSV samplesheet with sample and assembly columns"},
+    "outdir": {"type": "string", "default": "results"},
+    "proteins": {"type": "string", "description": "Protein FASTA evidence"},
+    "busco_lineage": {"type": "string", "default": "poales_odb10"},
+    "busco_db": {"type": "string"},
+    "edta_species": {"type": "string", "default": "others"},
+    "edta_db": {"type": "string"},
+    "repeatmasker_library": {"type": "string"},
+    "interproscan": {"type": "boolean", "default": false},
+    "interproscan_db": {"type": "string"},
+    "eggnog": {"type": "boolean", "default": false},
+    "eggnog_db": {"type": "string"},
+    "run_edta": {"type": "boolean", "default": true},
+    "run_repeatmasker": {"type": "boolean", "default": true},
+    "min_contig_size": {"type": "integer", "default": 5000, "minimum": 0},
+    "max_cpus": {"type": "integer", "default": 32, "minimum": 1},
+    "max_memory": {"type": "string", "default": "128.GB"},
+    "max_time": {"type": "string", "default": "7.day"}
+  },
+  "required": ["input", "proteins"]
+}

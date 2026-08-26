@@ -1,0 +1,21 @@
+########################################################################
+# HTCondor submit file for the Meristem Nextflow head process.
+# Submit with: condor_submit run_annotation.submit
+########################################################################
+
+# Run the Nextflow head process persistently on the submit node. The head
+# process submits individual tasks using the profile's Condor executor.
+# Leave head-process resources at the local-universe defaults, matching the
+# working Canopy pipeline. Explicit CPU/memory requests can prevent this
+# lightweight coordinator from matching the submit node's local slot.
+universe       = local
+executable     = /mnt/cephfs/linuxhome/benucci/Meristem/run_annotation_condor.sh
+initialdir     = /mnt/cephfs/linuxhome/benucci/Meristem
+getenv         = true
+environment    = "PROTEINS=/mnt/cephfs/linuxhome/benucci/Meristem/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa BUSCO_DB=/mnt/cephfs/linuxhome/benucci/Meristem/databases/busco_downloads"
+notification   = Never
+output         = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stdout.txt
+error          = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stderr.txt
+log            = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.condor.log
+on_exit_hold   = (ExitCode =!= 0)
+queue

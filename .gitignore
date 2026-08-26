@@ -1,0 +1,68 @@
+# Nextflow runtime state and generated work directories
+.nextflow/
+.nextflow.log*
+work/
+nf-work-*/
+
+# Pipeline outputs and test-generated results
+results/
+test_results/
+pipeline_info/
+
+# Condor logs and generated submission artifacts
+condor_logs/
+*.condor.sub
+*.condor.log
+*.condor.out
+*.condor.err
+
+# Local containers, caches, and tool state
+.apptainer_cache/
+.singularity_cache/
+.conda/
+.home/
+.codex/
+
+# Local/shared databases and large reference data
+databases/
+*.fa
+*.fasta
+*.faa
+*.fna
+*.fa.gz
+*.fasta.gz
+*.faa.gz
+*.fna.gz
+*.hmm
+*.hmm.gz
+*.dmnd
+
+# Small committed fixtures remain version-controlled
+!tests/
+!tests/data/
+!tests/data/*.fa
+!tests/data/*.faa
+!tests/data/*.fasta
+!tests/data/*.fna
+
+# Local configuration, credentials, and editor/OS files
+AGENTS.md
+plan/
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary and generated files
+*.tmp
+*.temp
+*.bak
+*.orig
+*.pyc
+__pycache__/
