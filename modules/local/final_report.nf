@@ -11,7 +11,7 @@ process FINAL_REPORT {
 
     script:
     """
-    summary=\$(find "$busco_dir" -type f -name 'short_summary*.txt' | head -1)
+    summary=\$(find -L "$busco_dir" -type f -name 'short_summary*.txt' | head -1)
     test -n "\$summary"
     {
       echo -e "sample\\tbusco_lineage\\tbusco_summary"
@@ -19,7 +19,6 @@ process FINAL_REPORT {
       tr '\\n' ' ' < "\$summary"
       echo
     } > "${sample}.annotation_summary.tsv"
-    cp "$metadata" "${sample}.assembly.tsv"
     """
 
     stub:

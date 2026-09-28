@@ -4,14 +4,66 @@ This Nextflow DSL2 pipeline performs:
 
 ```text
 assembly validation -> EDTA repeat discovery -> RepeatMasker soft masking
--> BRAKER3 protein-only prediction -> BUSCO -> optional InterProScan/eggNOG
+-> independent BRAKER3, BRAKER4/Snakemake, and/or Helixer prediction
+-> comparison of alternative annotations
 ```
 
 It is designed for the scaffolded plant assemblies produced by the Meristem project. It does not delete inputs or shared databases.
 
 ## Status
 
-The workflow is implemented and ready for a small test run. Production use requires compatible containers and pre-installed databases. BRAKER3 protein-only mode does not require RNA-seq.
+The workflow is implemented and ready for a small test run. Production use requires compatible containers and pre-installed databases. BRAKER3 and BRAKER4 protein-only modes do not require RNA-seq. BRAKER3 remains enabled by default; the alternative predictors are opt-in.
+
+## Alternative annotation methods
+
+BRAKER4 is run through the upstream Snakemake workflow. A checkout is staged
+at `vendor/BRAKER4/` and the pinned Snakemake environment is staged at
+`.snakemake-env/`; both are local runtime assets ignored by Git. The workflow
+does not clone repositories or download databases at run time. Snakemake runs inside one Condor allocation with
+`--restart-times 3`, `--rerun-incomplete`, and `--keep-going`, so an interrupted
+run can be resumed by rerunning the same command. The nested BRAKER4 rules use
+Apptainer for their tool containers and should use a pre-populated cache. The
+checkout is currently at commit
+`42be27bd08fd1a73bf769c21c2697ac66781d85f`, and the local environment contains
+Snakemake 8.18.2:
+
+```bash
+nextflow run main.nf -profile condor \
+  --input assets/F10702.samplesheet.csv \
+  --proteins databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa \
+  --run_braker3 false \
+  --run_braker4 true \
+  --braker4_source vendor/BRAKER4 \
+  --braker4_snakemake .snakemake-env/bin/snakemake \
+  --braker4_singularity_prefix /path/to/shared/apptainer_cache \
+  --busco_db /mnt/cephfs/linuxhome/compbio/nonbackup/busco \
+  --outdir results/F10702-braker4
+```
+
+BRAKER4 receives the RepeatMasker soft-masked assembly and the configured
+protein evidence, so it runs in protein-only EP mode. Its standardized outputs
+are published under `gene_prediction/braker4/`.
+
+Helixer is also opt-in and uses the staged local copy of
+`gglyptodon/helixer-docker:helixer_v0.3.7_cuda_12.2.2-cudnn8_1` with the
+upstream one-step interface and `land_plant` model by default:
+
+```bash
+nextflow run main.nf -profile condor \
+  --input assets/F10702.samplesheet.csv \
+  --run_braker3 false --run_helixer true \
+  --helixer_container .apptainer_cache/helixer_v0.3.7_cuda_12.2.2-cudnn8_1.sif \
+  --helixer_container_options '--nv' \
+  --outdir results/F10702-helixer
+```
+
+The land-plant model is staged at
+`helixer_models/land_plant/land_plant_v0.3_a_0080.h5`. Set `--helixer_model`
+to another local HDF5 model when needed.
+Use `--helixer_container_options '--nv'` only on a node with NVIDIA GPU
+support; Helixer can run on CPU but will be substantially slower. When both
+`--run_braker4 true` and `--run_helixer true` are selected, the workflow writes
+feature-count comparisons to `comparison/<sample>.annotation_comparison.tsv`.
 
 ## Input samplesheet
 
@@ -21,6 +73,24 @@ F10702,/home/glbrc.org/benucci/nf-broom/results_F10702_prev_2026-07-30/assembly/
 ```
 
 Protein evidence is supplied separately as one FASTA file. Protein IDs must be unique and sequence headers should be simple.
+
+For a large, redundant protein set, clustering can optionally create a smaller
+representative FASTA for BRAKER. The source database is never modified:
+
+```bash
+nextflow run main.nf \
+  --input assets/F10702.samplesheet.csv \
+  --proteins /path/to/plant_proteins.faa \
+  --cluster_proteins true \
+  --cluster_min_seq_id 0.90 \
+  --cluster_coverage 0.80
+```
+
+The module uses MMseqs2 `easy-linclust`, 90% minimum sequence identity, 80%
+coverage, and target-coverage mode by default. Lowering identity to 80% reduces
+runtime more aggressively but can discard divergent homologs that are useful to
+BRAKER. The standalone `scripts/cluster_braker_proteins.sh` helper remains
+available for preparing evidence outside Nextflow.
 
 The initial curated evidence set is available in the workspace at:
 
@@ -97,14 +167,28 @@ The launcher writes work files under `nf-work-F10702`, results under `results/F1
 
 The Condor launcher prepends `bin/` to `PATH` so Nextflow worker submissions use the bundled `bin/condor_submit` wrapper. The wrapper routes submissions to the submit host schedd (`scarcity-ap-1.glbrc.org`); override this with `MERISTEM_CONDOR_SCHEDD` if the site scheduler changes.
 
+To monitor a submitted head job every 10 minutes, pass the cluster ID printed by
+`condor_submit` to the bundled monitor. It reports queue and history status and
+stops when the job completes, is held, or is removed:
+
+```bash
+scripts/monitor_condor_job.sh 143159 600 | tee condor_logs/annotation-monitor.log
+```
+
+The second argument is optional and is the polling interval in seconds; `600`
+is the default.
+
 ## Outputs
 
 - `assembly_qc/`: assembly statistics
 - `repeats/`: EDTA libraries, EDTA annotation, RepeatMasker reports, and soft-masked FASTA
-- `gene_prediction/`: BRAKER3 GFF3, proteins, CDS, and logs
+- `gene_prediction/`: BRAKER3, BRAKER4, and/or Helixer annotations and logs
+- `comparison/`: feature-count comparison between BRAKER4 and Helixer
 - `busco/`: completeness reports
+- `busco_comparison/`: side-by-side BRAKER4 and Helixer BUSCO summaries and TSV comparison
 - `functional/`: optional InterProScan and eggNOG results
-- `reports/`: per-sample summaries
+- `reports/`: per-sample Markdown summaries, MultiQC HTML/data, ZIP report bundles, and `pipeline_tools.md`
+- `pipeline_info/`: Nextflow execution report, timeline, and trace
 
 Nextflow reports should be written under `pipeline_info/` in the output directory.
 

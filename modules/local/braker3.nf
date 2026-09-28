@@ -26,8 +26,10 @@ process BRAKER3 {
       --AUGUSTUS_CONFIG_PATH "\$PWD/augustus_config" \\
       > "${sample}.braker.log" 2>&1
     gff=\$(find braker_work -maxdepth 2 -type f -name 'braker.gff3' | head -1)
-    prot=\$(find braker_work -maxdepth 2 -type f \( -name 'augustus.hints.aa' -o -name 'braker.aa' \) | head -1)
-    cds=\$(find braker_work -maxdepth 2 -type f \( -name 'augustus.hints.codingseq' -o -name 'braker.codingseq' \) | head -1)
+    prot=\$(find braker_work -maxdepth 2 -type f -name 'augustus.hints.aa' -print -quit)
+    test -n "\$prot" || prot=\$(find braker_work -maxdepth 2 -type f -name 'braker.aa' -print -quit)
+    cds=\$(find braker_work -maxdepth 2 -type f -name 'augustus.hints.codingseq' -print -quit)
+    test -n "\$cds" || cds=\$(find braker_work -maxdepth 2 -type f -name 'braker.codingseq' -print -quit)
     test -n "\$gff" && test -s "\$gff"
     test -n "\$prot" && test -s "\$prot"
     test -n "\$cds" && test -s "\$cds"

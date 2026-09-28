@@ -12,7 +12,7 @@ universe       = local
 executable     = /mnt/cephfs/linuxhome/benucci/Meristem/run_annotation_condor.sh
 initialdir     = /mnt/cephfs/linuxhome/benucci/Meristem
 getenv         = true
-environment    = "PROTEINS=/mnt/cephfs/linuxhome/benucci/Meristem/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa BUSCO_DB=/mnt/cephfs/linuxhome/benucci/Meristem/databases/busco_downloads"
+environment    = "PROTEINS=/mnt/cephfs/linuxhome/benucci/Meristem/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa BUSCO_DB=/mnt/cephfs/linuxhome/benucci/Meristem/databases/busco_downloads CLUSTER_PROTEINS=true CLUSTER_MIN_SEQ_ID=0.80 CLUSTER_COVERAGE=0.80 RUN_BRAKER3=false RUN_BRAKER4=true RUN_HELIXER=true"
 notification   = Never
 output         = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stdout.txt
 error          = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stderr.txt

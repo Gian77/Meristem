@@ -22,6 +22,11 @@ condor_logs/
 .conda/
 .home/
 .codex/
+.snakemake-env/
+.snakemake-cache/
+.conda-pkgs/
+vendor/BRAKER4/
+helixer_models/
 
 # Local/shared databases and large reference data
 databases/
@@ -47,6 +52,7 @@ databases/
 
 # Local configuration, credentials, and editor/OS files
 AGENTS.md
+MEMORY.md
 plan/
 .env
 .env.*
