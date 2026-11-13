@@ -8,14 +8,29 @@
 # Leave head-process resources at the local-universe defaults, matching the
 # working Canopy pipeline. Explicit CPU/memory requests can prevent this
 # lightweight coordinator from matching the submit node's local slot.
+PROJECT_DIR = /mnt/cephfs/linuxhome/benucci/Meristem
+RUN_NAME = F10702-clean-20261015
+INPUT = $(PROJECT_DIR)/assets/F10702.samplesheet.csv
+OUTDIR = $(PROJECT_DIR)/results/$(RUN_NAME)
+WORKDIR = $(PROJECT_DIR)/nf-work-$(RUN_NAME)
+PROTEINS = $(PROJECT_DIR)/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa
+BUSCO_DB = $(PROJECT_DIR)/databases/busco_downloads
+
+# For another genome set RUN_NAME, INPUT, OUTDIR, and WORKDIR together, and add
+# NEW_RUN=true to the environment line below for its first run.
 universe       = local
-executable     = /mnt/cephfs/linuxhome/benucci/Meristem/run_annotation_condor.sh
-initialdir     = /mnt/cephfs/linuxhome/benucci/Meristem
+executable     = $(PROJECT_DIR)/run_annotation_condor.sh
+initialdir     = $(PROJECT_DIR)
 getenv         = true
-environment    = "PROTEINS=/mnt/cephfs/linuxhome/benucci/Meristem/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa BUSCO_DB=/mnt/cephfs/linuxhome/benucci/Meristem/databases/busco_downloads CLUSTER_PROTEINS=true CLUSTER_MIN_SEQ_ID=0.80 CLUSTER_COVERAGE=0.80 RUN_BRAKER3=false RUN_BRAKER4=true RUN_HELIXER=true"
+environment    = "INPUT=$(INPUT) OUTDIR=$(OUTDIR) WORKDIR=$(WORKDIR) PROTEINS=$(PROTEINS) BUSCO_DB=$(BUSCO_DB) CLUSTER_PROTEINS=true CLUSTER_MIN_SEQ_ID=0.80 CLUSTER_COVERAGE=0.80 RUN_BRAKER4=true RUN_HELIXER=true"
 notification   = Never
-output         = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stdout.txt
-error          = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stderr.txt
-log            = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.condor.log
-on_exit_hold   = (ExitCode =!= 0)
+output         = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).stdout.txt
+error          = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).stderr.txt
+log            = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).condor.log
+# A node eviction terminates the Nextflow coordinator with a nonzero exit
+# code even though the workflow itself may be resumable. Keep the job in the
+# queue for up to three starts so -resume can pick up cached tasks after a
+# transient eviction; hold a genuinely failing run after the final attempt.
+on_exit_remove = (ExitCode == 0) || (NumJobStarts >= 3)
+on_exit_hold   = (ExitCode =!= 0) && (NumJobStarts >= 3)
 queue

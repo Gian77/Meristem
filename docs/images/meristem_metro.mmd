@@ -1,0 +1,82 @@
+%%metro title: MERISTEM
+%%metro style: seqera
+%%metro file: genome_in | FASTA
+%%metro file: prot_in | FASTA
+%%metro file: gff_out | GFF3
+%%metro file: zip_out | ZIP
+%%metro line: braker | BRAKER4 gene models (--run_braker4) | #2db572
+%%metro line: helixer | Helixer gene models (--run_helixer) | #0570b0
+%%metro line: evidence | Protein evidence (--proteins, --cluster_proteins) | #f5a623
+%%metro line: origin | Gene origin check, report only (--gene_origin_db) | #c77dff | dashed
+%%metro line: functional | Functional annotation of BRAKER4 genes (--interproscan, --eggnog) | #8d99ae | dashed
+%%metro grid: repeats | 0,0
+%%metro grid: prediction | 1,0
+%%metro grid: qc | 1,1
+%%metro grid: reports | 0,1
+%%metro legend: bl
+
+graph LR
+    subgraph repeats [Repeat masking]
+        %%metro number: 1
+        %%metro exit: right | braker, helixer
+        genome_in[ ]
+        validate[Validate assembly]
+        edta[EDTA]
+        rmask[RepeatMasker]
+
+        genome_in -->|braker,helixer| validate
+        validate -->|braker,helixer| edta
+        edta -->|braker,helixer| rmask
+    end
+
+    subgraph prediction [Gene prediction]
+        %%metro number: 2
+        %%metro entry: left | braker, helixer
+        %%metro exit: bottom | braker, helixer, origin
+        prot_in[ ]
+        mmseqs[MMseqs2 clustering]
+        braker4[BRAKER4]
+        helixer_n[Helixer]
+        hx_prot[Helixer proteins]
+        functional_n[InterProScan, eggNOG]
+
+        prot_in -->|evidence| mmseqs
+        mmseqs -->|evidence| braker4
+        helixer_n -->|helixer| hx_prot
+        braker4 -->|functional| functional_n
+    end
+
+    subgraph qc [Annotation QC]
+        %%metro number: 3
+        %%metro direction: RL
+        %%metro entry: top | braker, helixer, origin
+        %%metro exit: left | braker, helixer, origin
+        busco[BUSCO]
+        compare[Compare methods]
+        origin_n[MMseqs2 vs UniProt]
+
+        busco -->|braker,helixer| compare
+    end
+
+    subgraph reports [Reports and deliverables]
+        %%metro number: 4
+        %%metro direction: RL
+        %%metro entry: right | braker, helixer, origin
+        report[MultiQC + reports]
+        package[Package results]
+        gff_out[ ]
+        zip_out[ ]
+
+        report -->|braker,helixer,origin| package
+        package -->|braker,helixer| gff_out
+        package -->|origin| zip_out
+    end
+
+    rmask -->|braker| braker4
+    rmask -->|helixer| helixer_n
+    braker4 -->|braker| busco
+    hx_prot -->|helixer| busco
+    braker4 -->|origin| origin_n
+    hx_prot -->|origin| origin_n
+    compare -->|braker,helixer| report
+    origin_n -->|origin| report

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Placeholder Snakemake for stub test runs (-stub-run). It is never executed.
+exit 1

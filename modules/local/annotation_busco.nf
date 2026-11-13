@@ -2,12 +2,13 @@ process HELIXER_PROTEINS {
     tag "$sample"
     label 'busco'
     container params.busco_container
+    publishDir "${params.outdir}/gene_prediction/helixer", mode: params.publish_dir_mode
 
     input:
     tuple val(sample), path(gff), path(genome), path(metadata)
 
     output:
-    tuple val(sample), path("${sample}.helixer.proteins.faa"), path(metadata), emit: proteins
+    tuple val(sample), path("${sample}.helixer.proteins.faa"), path("${sample}.helixer.codingseq.fna"), path(metadata), emit: proteins
 
     script:
     """
@@ -59,7 +60,8 @@ with open(gff_path) as handle:
             continue
         cds[parent.split(',')[0]].append((fields[0], int(fields[3]), int(fields[4]), fields[6], int(fields[7]) if fields[7].isdigit() else 0))
 
-with open(protein_path, 'w') as out:
+coding_path = protein_path.replace('.proteins.faa', '.codingseq.fna')
+with open(protein_path, 'w') as out, open(coding_path, 'w') as coding_out:
     for transcript, parts in cds.items():
         strand = parts[0][3]
         parts.sort(key=lambda item: item[1], reverse=(strand == '-'))
@@ -68,8 +70,13 @@ with open(protein_path, 'w') as out:
             fragment = genome[contig][start - 1:end]
             if strand == '-':
                 fragment = fragment.translate(complement)[::-1]
-            sequence.append(fragment[phase:])
+            # GFF3 phase bases belong to the coding sequence. Removing them
+            # independently at each CDS junction shifts the reading frame.
+            sequence.append(fragment)
         coding = ''.join(sequence)
+        coding_out.write('>' + transcript + '\\n')
+        for i in range(0, len(coding), 80):
+            coding_out.write(coding[i:i+80] + '\\n')
         protein = ''.join(codon_table.get(coding[i:i+3], 'X') for i in range(0, len(coding) - 2, 3)).rstrip('*')
         if protein:
             out.write('>' + transcript + '\\n')
@@ -82,6 +89,7 @@ PY
     stub:
     """
     printf '>helixer_stub\\nM\\n' > "${sample}.helixer.proteins.faa"
+    printf '>helixer_stub\\nATG\\n' > "${sample}.helixer.codingseq.fna"
     """
 }
 
@@ -93,6 +101,7 @@ process ANNOTATION_BUSCO {
 
     input:
     tuple val(sample), val(method), path(proteins), path(metadata)
+    path busco_db
 
     output:
     tuple val(sample), val(method),
@@ -100,7 +109,7 @@ process ANNOTATION_BUSCO {
           path("busco_${method}_${sample}/run_${params.busco_lineage}/short_summary.txt"), emit: qc
 
     script:
-    def db_args = params.busco_db ? "--download_path '${params.busco_db}' --offline" : ""
+    def db_args = params.busco_db ? "--download_path '${busco_db}' --offline" : ""
     """
     busco -i "$proteins" -l "${params.busco_lineage}" -m proteins \\
       -o "busco_${method}_${sample}" --cpu $task.cpus $db_args

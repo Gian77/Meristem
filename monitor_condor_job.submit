@@ -1,0 +1,22 @@
+########################################################################
+# Persistent local-universe monitor for a Meristem Condor head job.
+# Submit with:
+#   condor_submit -append 'JOB_ID=145278' monitor_condor_job.submit
+########################################################################
+
+PROJECT_DIR = /mnt/cephfs/linuxhome/benucci/Meristem
+JOB_ID      = 0
+INTERVAL    = 600
+
+universe    = local
+executable  = $(PROJECT_DIR)/scripts/monitor_condor_job.sh
+initialdir  = $(PROJECT_DIR)
+getenv      = false
+environment = "_CONDOR_NETWORK_INTERFACE=127.0.0.2"
+arguments   = $(JOB_ID) $(INTERVAL)
+notification = Never
+output      = $(PROJECT_DIR)/condor_logs/annotation-monitor-$(JOB_ID).log
+error       = $(PROJECT_DIR)/condor_logs/annotation-monitor-$(JOB_ID).stderr.txt
+log         = $(PROJECT_DIR)/condor_logs/annotation-monitor-$(JOB_ID).condor.log
+on_exit_remove = true
+queue

@@ -26,6 +26,7 @@ condor_logs/
 .snakemake-cache/
 .conda-pkgs/
 vendor/BRAKER4/
+vendor/BRAKER4-*/
 helixer_models/
 
 # Local/shared databases and large reference data
@@ -72,3 +73,11 @@ Thumbs.db
 *.orig
 *.pyc
 __pycache__/
+
+# Personal notes and local run files (not for other users)
+CLAUDE.md
+ROADMAP.md
+assets/F25101_v2.samplesheet.csv
+conf/local-4cpu-validation.config
+full_final.samplesheet.csv
+tests/data/f10702_corrected.samplesheet.csv

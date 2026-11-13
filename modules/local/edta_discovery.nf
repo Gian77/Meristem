@@ -9,7 +9,7 @@ process EDTA_DISCOVERY {
 
     output:
     tuple val(sample), path("${sample}.edta.fa"), path("${sample}.EDTA.TElib.fa"), path(metadata), emit: repeats
-    path "${sample}.EDTA.anno.gff3", emit: edta_gff
+    path "${sample}.EDTA.TEanno.gff3", emit: edta_gff
     path "${sample}.edta_id_map.tsv", emit: id_map
 
     script:
@@ -33,9 +33,9 @@ process EDTA_DISCOVERY {
     lib=\$(find . -type f -name '*.mod.EDTA.TElib.fa' -o -type f -name '*.EDTA.TElib.fa' | head -1)
     test -n "\$lib" && test -s "\$lib"
     cp "\$lib" "${sample}.EDTA.TElib.fa"
-    gff=\$(find . -type f -name '*.EDTA.anno.gff3' -o -type f -name '*.EDTA.anno.gff' | head -1 || true)
-    gff_target="${sample}.EDTA.anno.gff3"
-    if [[ -n "\$gff" ]]; then cp "\$gff" "\$gff_target"; else touch "\$gff_target"; fi
+    gff=\$(find . -type f -name '*.EDTA.TEanno.gff3' -size +0c | head -1 || true)
+    gff_target="${sample}.EDTA.TEanno.gff3"
+    if [[ -n "\$gff" ]]; then cp "\$gff" "\$gff_target"; else exit 1; fi
     """
 
     stub:
@@ -55,6 +55,6 @@ process EDTA_DISCOVERY {
       { print }
     ' "$assembly" > "${sample}.edta.fa"
     cp "${sample}.edta.fa" "${sample}.EDTA.TElib.fa"
-    touch "${sample}.EDTA.anno.gff3"
+    printf '##gff-version 3\n' > "${sample}.EDTA.TEanno.gff3"
     """
 }
