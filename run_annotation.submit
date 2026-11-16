@@ -1,21 +1,47 @@
 ########################################################################
-# HTCondor submit file for the Meristem Nextflow head process.
-# Submit with: condor_submit run_annotation.submit
+# HTCondor submit file for one Meristem run (template).
+# Copy it, edit the values below, and submit from the Meristem folder:
+#   condor_submit my_run.submit
+#
+# The Nextflow head process runs on the submit node (universe = local) and
+# submits each task to the cluster with -profile condor. Leave head-process
+# resources at the local-universe defaults: explicit CPU/memory requests can
+# stop this lightweight coordinator from matching the submit node's slot.
 ########################################################################
 
-# Run the Nextflow head process persistently on the submit node. The head
-# process submits individual tasks using the profile's Condor executor.
-# Leave head-process resources at the local-universe defaults, matching the
-# working Canopy pipeline. Explicit CPU/memory requests can prevent this
-# lightweight coordinator from matching the submit node's local slot.
+# ---- Edit these ---------------------------------------------------------
+PROJECT_DIR = /mnt/cephfs/linuxhome/benucci/Meristem
+# A new name for each run; results and work files are named after it
+RUN_NAME = my-run-YYYYMMDD
+# CSV with sample,assembly[,canopy_flagged] (absolute paths)
+INPUT = $(PROJECT_DIR)/assets/my_run.samplesheet.csv
+PROTEINS = $(PROJECT_DIR)/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa
+BUSCO_DB = $(PROJECT_DIR)/databases/busco_downloads
+# Reported BUSCO (odb10) and the lineage BRAKER4 uses internally (odb12)
+BUSCO_LINEAGE = poales_odb10
+BRAKER4_BUSCO_LINEAGE = poales_odb12
+# Set INTERPROSCAN = false to skip functional annotation
+INTERPROSCAN = true
+INTERPROSCAN_DB = $(PROJECT_DIR)/databases/interproscan/interproscan-5.75-106.0/data
+# ------------------------------------------------------------------------
+
+OUTDIR = $(PROJECT_DIR)/results/$(RUN_NAME)
+WORKDIR = $(PROJECT_DIR)/nf-work-$(RUN_NAME)
+
 universe       = local
-executable     = /mnt/cephfs/linuxhome/benucci/Meristem/run_annotation_condor.sh
-initialdir     = /mnt/cephfs/linuxhome/benucci/Meristem
+executable     = $(PROJECT_DIR)/run_annotation_condor.sh
+initialdir     = $(PROJECT_DIR)
 getenv         = true
-environment    = "PROTEINS=/mnt/cephfs/linuxhome/benucci/Meristem/databases/plant_annotation/ensembl_plants_release63/processed/poales_reference_proteins.faa BUSCO_DB=/mnt/cephfs/linuxhome/benucci/Meristem/databases/busco_downloads"
+# NEW_RUN=true starts a new session when none exists for OUTDIR and WORKDIR;
+# after an eviction the launcher resumes this run's own session.
+environment    = "INPUT=$(INPUT) OUTDIR=$(OUTDIR) WORKDIR=$(WORKDIR) PROTEINS=$(PROTEINS) BUSCO_DB=$(BUSCO_DB) BUSCO_LINEAGE=$(BUSCO_LINEAGE) BRAKER4_BUSCO_LINEAGE=$(BRAKER4_BUSCO_LINEAGE) CLUSTER_PROTEINS=true CLUSTER_MIN_SEQ_ID=0.80 CLUSTER_COVERAGE=0.80 RUN_BRAKER4=true RUN_HELIXER=true INTERPROSCAN=$(INTERPROSCAN) INTERPROSCAN_DB=$(INTERPROSCAN_DB) NEW_RUN=true"
 notification   = Never
-output         = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stdout.txt
-error          = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.stderr.txt
-log            = /mnt/cephfs/linuxhome/benucci/Meristem/condor_logs/annotation.condor.log
-on_exit_hold   = (ExitCode =!= 0)
+output         = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).stdout.txt
+error          = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).stderr.txt
+log            = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).condor.log
+# A node eviction ends the Nextflow coordinator with a nonzero exit code even
+# though the workflow can resume. Keep the job for up to three starts so the
+# launcher can resume cached tasks; hold a genuinely failing run after that.
+on_exit_remove = (ExitCode == 0) || (NumJobStarts >= 3)
+on_exit_hold   = (ExitCode =!= 0) && (NumJobStarts >= 3)
 queue

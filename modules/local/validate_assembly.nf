@@ -13,7 +13,10 @@ process VALIDATE_ASSEMBLY {
     """
     test -s "$assembly"
     awk -v sample="$sample" -v minlen="${params.min_contig_size}" '
-      /^>/ { if (len >= minlen) { n++; total += len; if (len > max) max=len; a[n]=len } }
+      /^>/ {
+        if (seen && len >= minlen) { n++; total += len; if (len > max) max=len; a[n]=len }
+        seen=1; len=0
+      }
       !/^>/ { gsub(/[[:space:]]/, ""); len += length(\$0); gaps += gsub(/[Nn]/, "N") }
       END {
         if (len >= minlen) { n++; total += len; if (len > max) max=len; a[n]=len }

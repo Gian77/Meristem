@@ -2,7 +2,10 @@ process REPEATMASKER {
     tag "$sample"
     label 'repeat_masking'
     container params.repeatmasker_container
-    publishDir "${params.outdir}/repeats/masked", mode: params.publish_dir_mode
+    // With EDTA, sequences carry short names here, so RESTORE_REPEAT_NAMES publishes the
+    // masked genome and the RepeatMasker table with the assembly's names instead.
+    publishDir "${params.outdir}/repeats/masked", mode: params.publish_dir_mode,
+        saveAs: { fn -> params.run_edta.toString().toBoolean() && (fn.endsWith('.softmasked.fa') || fn.endsWith('.repeatmasker.out')) ? null : fn }
 
     input:
     tuple val(sample), path(assembly), path(repeat_library), path(metadata)

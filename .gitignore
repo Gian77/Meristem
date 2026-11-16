@@ -22,6 +22,12 @@ condor_logs/
 .conda/
 .home/
 .codex/
+.snakemake-env/
+.snakemake-cache/
+.conda-pkgs/
+vendor/BRAKER4/
+vendor/BRAKER4-*/
+helixer_models/
 
 # Local/shared databases and large reference data
 databases/
@@ -47,6 +53,7 @@ databases/
 
 # Local configuration, credentials, and editor/OS files
 AGENTS.md
+MEMORY.md
 plan/
 .env
 .env.*
@@ -66,3 +73,23 @@ Thumbs.db
 *.orig
 *.pyc
 __pycache__/
+
+# Personal notes and local run files (not for other users)
+CLAUDE.md
+ROADMAP.md
+assets/F25101_v2.samplesheet.csv
+conf/local-4cpu-validation.config
+full_final.samplesheet.csv
+tests/data/f10702_corrected.samplesheet.csv
+PROGRESS.md
+.claude/settings.local.json
+.claude/*.bak
+.claude/hooks/*.bak
+.claude/CLAUDE.condor.md
+.claude/
+assets/sorghum_v6.samplesheet.csv
+run_sorghum_v6.submit
+notes_archive_*.tar.gz
+
+# Pipeline tests
+tests/score_col0.submit
