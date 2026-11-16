@@ -2,7 +2,10 @@ process EDTA_DISCOVERY {
     tag "$sample"
     label 'repeat_discovery'
     container params.edta_container
-    publishDir "${params.outdir}/repeats/edta", mode: params.publish_dir_mode
+    // The renamed genome (<sample>.edta.fa) stays in the work directory, and the repeat
+    // annotation is published by RESTORE_REPEAT_NAMES with the assembly's names.
+    publishDir "${params.outdir}/repeats/edta", mode: params.publish_dir_mode,
+        saveAs: { fn -> fn.endsWith('.edta.fa') || fn.endsWith('.EDTA.TEanno.gff3') ? null : fn }
 
     input:
     tuple val(sample), path(assembly), path(metadata)

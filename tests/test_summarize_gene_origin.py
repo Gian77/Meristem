@@ -14,7 +14,8 @@ SPEC.loader.exec_module(origin)
 
 NODES = ''.join(f'{child}\t|\t{parent}\t|\trank\t|\n' for child, parent in [
     ('1', '1'), ('2', '1'), ('2759', '1'), ('33090', '2759'), ('3702', '33090'),
-    ('562', '2'), ('9606', '33208'), ('33208', '2759'), ('5052', '2759')])
+    ('562', '2'), ('9606', '33208'), ('33208', '2759'), ('5052', '2759'),
+    ('4751', '2759'), ('5061', '4751')])
 
 
 def gene(contig, name, start, cds=1):
@@ -24,12 +25,12 @@ def gene(contig, name, start, cds=1):
     return '\n'.join(rows) + '\n'
 
 
-def hit(name, taxid, bits=100, identity=60):
-    return f'{name}.t1\tsp\t{identity}\t1\t1\t1e-20\t{bits}\tProtein OS=Thing OX={taxid} PE=1\n'
+def hit(name, taxid, bits=100, identity=60, pe=1):
+    return f'{name}.t1\tsp\t{identity}\t1\t1\t1e-20\t{bits}\tProtein OS=Thing OX={taxid} PE={pe} SV=1\n'
 
 
 class GeneOriginTests(unittest.TestCase):
-    def run_check(self, gff, hits, id_map=None):
+    def run_check(self, gff, hits, id_map=None, review=None):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             (tmp / 'g.gff3').write_text(gff)
@@ -42,6 +43,9 @@ class GeneOriginTests(unittest.TestCase):
             if id_map:
                 (tmp / 'm.tsv').write_text(id_map)
                 argv += ['--id-map', str(tmp / 'm.tsv')]
+            if review is not None:
+                (tmp / 'flagged.fa').write_text(review)
+                argv += ['--review-fasta', str(tmp / 'flagged.fa')]
             with mock.patch.object(sys, 'argv', argv):
                 origin.main()
             lines = (tmp / 'S.m.gene_origin.tsv').read_text().splitlines()
@@ -68,7 +72,7 @@ class GeneOriginTests(unittest.TestCase):
     def test_gene_totals_show_what_removal_would_change(self):
         _, summary = self.run_check(*self.example())
         self.assertIn('| All predicted genes | 7 |', summary)
-        self.assertIn('| On contigs called `bacterial_like` | 4 |', summary)
+        self.assertIn('| On contigs called `bacterial_like`, `fungal_like`, `animal_like` | 4 |', summary)
         self.assertIn('| Left if those contigs were removed | 3 |', summary)
         self.assertIn('nothing was removed', summary)
 
@@ -93,6 +97,60 @@ class GeneOriginTests(unittest.TestCase):
         table, summary = self.run_check(gff, hits, 'normalized_id\toriginal_id\nbac\tcontig_77\n')
         self.assertEqual(table['bac']['original_id'], 'contig_77')
         self.assertIn('| contig_77 |', summary)
+
+    def test_fungal_and_animal_contigs_are_called(self):
+        gff = ''.join(gene('bac', f'f{i}', 1 + 20 * i) for i in range(3))
+        gff += ''.join(gene('chr', f'a{i}', 1 + 20 * i) for i in range(3))
+        hits = ''.join(hit(f'f{i}', 5061) for i in range(3)) + ''.join(hit(f'a{i}', 9606) for i in range(3))
+        table, summary = self.run_check(gff, hits)
+        self.assertEqual(table['bac']['call'], 'fungal_like')
+        self.assertEqual(table['chr']['call'], 'animal_like')
+        self.assertIn('| On contigs called `bacterial_like`, `fungal_like`, `animal_like` | 6 |', summary)
+        self.assertIn('| bac | fungal_like |', summary)
+
+    def test_uncertain_entries_are_ignored(self):
+        # Plant rDNA genes whose top hit is a dubious yeast ORF (PE=5, like ART2_YEAST)
+        # must not make the contig fungal. A gene with a weaker certain hit keeps that hit.
+        gff = ''.join(gene('bac', f'r{i}', 1 + 20 * i) for i in range(4))
+        hits = ''.join(hit(f'r{i}', 5061, bits=200, pe=5) for i in range(4))
+        hits += hit('r0', 3702, bits=50)
+        table, summary = self.run_check(gff, hits)
+        self.assertEqual(table['bac']['fungi'], '0')
+        self.assertEqual(table['bac']['plant'], '1')
+        self.assertEqual(table['bac']['hits'], '1')
+        self.assertEqual(table['bac']['call'], 'too_few_hits')
+        self.assertIn('Genes whose top hit was such an entry: 4;', summary)
+
+    def test_canopy_rdna_label_is_marked_not_removed(self):
+        gff = ''.join(gene('bac', f'f{i}', 1 + 20 * i) for i in range(3))
+        hits = ''.join(hit(f'f{i}', 5061) for i in range(3))
+        flagged = ('>bac canopy_decision=keep;rule=none;evidence_taxon=Aniger\nACGT\n'
+                   '>chr canopy_decision=keep;rule=none;evidence_taxon=Streptophyta\nACGT\n'
+                   '>gone canopy_decision=remove;rule=R1;evidence_taxon=Rdelemar\nACGT\n')
+        table, summary = self.run_check(gff, hits, review=flagged)
+        self.assertEqual(table['bac']['call'], 'fungal_like')
+        self.assertEqual(table['bac']['canopy_rdna_label'], 'Aniger')
+        self.assertEqual(table['chr']['canopy_rdna_label'], '')
+        self.assertIn('| likely rDNA (Canopy: Aniger) |', summary)
+        self.assertIn('**1 of the 1 flagged contig is likely rDNA, not contamination** (3 genes)', summary)
+        self.assertIn('Canopy labelled it `Aniger`,', summary)
+        self.assertIn('| On contigs called `bacterial_like`, `fungal_like`, `animal_like` | 3 |', summary)
+
+    def test_canopy_review_contigs_are_listed(self):
+        gff, hits = self.example()
+        review = ('>contig_77 canopy_decision=review;rule=none;evidence_taxon=Aspergillus_niger\nACGT\n'
+                  '>chr canopy_decision=keep;rule=none\nACGT\n'
+                  '>gone canopy_decision=review;rule=none;evidence_taxon=no-hit\nACGT\n')
+        table, summary = self.run_check(gff, hits, 'normalized_id\toriginal_id\nbac\tcontig_77 desc\n', review)
+        self.assertEqual(table['bac']['canopy_review'], 'Aspergillus_niger')
+        self.assertEqual(table['chr']['canopy_review'], '')
+        self.assertIn('## Contigs Canopy kept for review', summary)
+        self.assertIn('| contig_77 | Aspergillus_niger | bacterial_like |', summary)
+        self.assertIn('1 review contig(s) named by Canopy are not in this genome', summary)
+
+    def test_review_section_absent_without_flagged_fasta(self):
+        _, summary = self.run_check(*self.example())
+        self.assertNotIn('Canopy kept', summary)
 
     def test_mismatched_protein_ids_fail_instead_of_reporting_no_hits(self):
         with self.assertRaises(SystemExit):

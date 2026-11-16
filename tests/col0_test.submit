@@ -3,27 +3,34 @@
 #
 # Col-0 has an expert reference annotation (Araport11-based TAIR10 GFF3 in
 # databases/test_col0/), so this run can be scored for accuracy, not only
-# BUSCO completeness. Rerun it after changing the workflow.
+# BUSCO completeness (tests/score_col0.sh). Rerun it after changing the
+# workflow.
 #
 # Submit from the Meristem folder: condor_submit tests/col0_test.submit
-# For a fresh test, change RUN_NAME (e.g. to a new date). NEW_RUN=true starts
-# a new session only when none exists for OUTDIR and WORKDIR; a restart after
-# an eviction resumes this run's own session.
+#
+# Fresh test: set RUN_NAME to a new date, WORKDIR to nf-work-$(RUN_NAME),
+#   RESUME_SESSION to empty, and keep NEW_RUN=true.
+# Rerun after a code change, reusing unchanged cached tasks (EDTA alone takes
+#   about 13 h): keep the previous WORKDIR and set RESUME_SESSION to that run's
+#   session ID (from .nextflow/history), with a new RUN_NAME. Results must go
+#   to a new OUTDIR, because a resumed run does not overwrite published files.
 ########################################################################
 
 PROJECT_DIR = /mnt/cephfs/linuxhome/benucci/Meristem
-RUN_NAME = Col0-test-20261112
+RUN_NAME = Col0-test-20261116
+WORKDIR = $(PROJECT_DIR)/nf-work-Col0-test-20261112
+RESUME_SESSION = 167f515b-4b70-4760-8da3-6d993ae3b3fc
 INPUT = $(PROJECT_DIR)/tests/data/col0.samplesheet.csv
 OUTDIR = $(PROJECT_DIR)/results/$(RUN_NAME)
-WORKDIR = $(PROJECT_DIR)/nf-work-$(RUN_NAME)
 PROTEINS = $(PROJECT_DIR)/databases/plant_annotation/ensembl_plants_release63/processed/brassicales_reference_proteins.faa
 BUSCO_DB = $(PROJECT_DIR)/databases/busco_downloads
+INTERPROSCAN_DB = $(PROJECT_DIR)/databases/interproscan/interproscan-5.75-106.0/data
 
 universe       = local
 executable     = $(PROJECT_DIR)/run_annotation_condor.sh
 initialdir     = $(PROJECT_DIR)
 getenv         = true
-environment    = "INPUT=$(INPUT) OUTDIR=$(OUTDIR) WORKDIR=$(WORKDIR) PROTEINS=$(PROTEINS) BUSCO_DB=$(BUSCO_DB) BUSCO_LINEAGE=brassicales_odb10 BRAKER4_BUSCO_LINEAGE=brassicales_odb12 CLUSTER_PROTEINS=true CLUSTER_MIN_SEQ_ID=0.80 CLUSTER_COVERAGE=0.80 RUN_BRAKER4=true RUN_HELIXER=true NEW_RUN=true"
+environment    = "INPUT=$(INPUT) OUTDIR=$(OUTDIR) WORKDIR=$(WORKDIR) RESUME_SESSION=$(RESUME_SESSION) PROTEINS=$(PROTEINS) BUSCO_DB=$(BUSCO_DB) BUSCO_LINEAGE=brassicales_odb10 BRAKER4_BUSCO_LINEAGE=brassicales_odb12 CLUSTER_PROTEINS=true CLUSTER_MIN_SEQ_ID=0.80 CLUSTER_COVERAGE=0.80 RUN_BRAKER4=true RUN_HELIXER=true INTERPROSCAN=true INTERPROSCAN_DB=$(INTERPROSCAN_DB) NEW_RUN=true"
 notification   = Never
 output         = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).stdout.txt
 error          = $(PROJECT_DIR)/condor_logs/$(RUN_NAME).stderr.txt

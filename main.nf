@@ -114,6 +114,9 @@ workflow {
     if (run_interproscan && !params.interproscan_db) {
         error "--interproscan requires --interproscan_db"
     }
+    if (run_interproscan && !workflow.stubRun && !file("${params.interproscan_db}/pfam").isDirectory()) {
+        error "--interproscan_db must be the prepared InterProScan data folder (with pfam/ inside): ${params.interproscan_db}"
+    }
     if (run_eggnog && !params.eggnog_db) {
         error "--eggnog requires --eggnog_db"
     }
@@ -138,6 +141,16 @@ workflow {
             tuple(row.sample.toString(), file(row.assembly.toString()))
         }
 
+    // Optional column: Canopy's <sample>_full_flagged.fasta, whose review contigs the gene
+    // origin report lists. An empty value or missing column means no review list.
+    review_fastas = Channel
+        .fromPath(params.input, checkIfExists: true)
+        .splitCsv(header: true)
+        .map { row ->
+            def flagged = row.canopy_flagged ? row.canopy_flagged.toString().trim() : ''
+            tuple(row.sample.toString(), flagged ? file(flagged, checkIfExists: true) : [])
+        }
+
     proteins = params.proteins ? file(params.proteins, checkIfExists: true) : null
     braker4_source = run_braker4 && params.braker4_source ? file(params.braker4_source, checkIfExists: true) : null
     braker4_snakemake = run_braker4 && params.braker4_snakemake ? file(params.braker4_snakemake, checkIfExists: true) : null
@@ -147,9 +160,10 @@ workflow {
     gene_origin_db = params.gene_origin_db ? file(params.gene_origin_db, checkIfExists: true) : []
     gene_origin_taxonomy = params.gene_origin_db ? file(params.gene_origin_taxonomy, checkIfExists: true) : []
     gene_origin_script = file("${projectDir}/scripts/summarize_gene_origin.py", checkIfExists: true)
+    restore_script = file("${projectDir}/scripts/restore_sequence_names.py", checkIfExists: true)
 
     ANNOTATION(samples, proteins, braker4_source, braker4_snakemake, helixer_model, busco_db, report_renderer,
-        gene_origin_db, gene_origin_taxonomy, gene_origin_script)
+        gene_origin_db, gene_origin_taxonomy, gene_origin_script, restore_script, review_fastas)
 
     // Record what this run used, before any task can change the inputs.
     def source_digests = pipelineSourceDigests(projectDir)

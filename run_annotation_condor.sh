@@ -39,6 +39,10 @@ if [[ "${RUN_GENE_ORIGIN:-true}" == "true" ]]; then
     EXTRA_ARGS+=(--gene_origin_db "${GENE_ORIGIN_DB:-${SHARED_DB}/funannotate_databases/funannotate_db/uniprot_sprot.fasta}")
     EXTRA_ARGS+=(--gene_origin_taxonomy "${GENE_ORIGIN_TAXONOMY:-${SHARED_DB}/PlusPFP_protozoa_fungi_plants/nodes.dmp}")
 fi
+# InterProScan is opt-in. It reads the prepared data folder of its version without changing it.
+if [[ "${INTERPROSCAN:-false}" == "true" ]]; then
+    EXTRA_ARGS+=(--interproscan true --interproscan_db "${INTERPROSCAN_DB:?Set INTERPROSCAN_DB to the prepared InterProScan data folder}")
+fi
 # Resume this run's own session, never whichever session was launched last in
 # this directory. Condor restarts after an eviction find it the same way. Set
 # RESUME_SESSION to reuse another session, or NEW_RUN=true for a first run.

@@ -81,3 +81,15 @@ assets/F25101_v2.samplesheet.csv
 conf/local-4cpu-validation.config
 full_final.samplesheet.csv
 tests/data/f10702_corrected.samplesheet.csv
+PROGRESS.md
+.claude/settings.local.json
+.claude/*.bak
+.claude/hooks/*.bak
+.claude/CLAUDE.condor.md
+.claude/
+assets/sorghum_v6.samplesheet.csv
+run_sorghum_v6.submit
+notes_archive_*.tar.gz
+
+# Pipeline tests
+tests/score_col0.submit

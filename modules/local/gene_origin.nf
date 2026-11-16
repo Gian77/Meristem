@@ -30,7 +30,7 @@ process GENE_ORIGIN_REPORT {
     publishDir "${params.outdir}/gene_origin", mode: params.publish_dir_mode
 
     input:
-    tuple val(sample), val(method), path(gff), path(hits), path(genome), path(id_map)
+    tuple val(sample), val(method), path(gff), path(hits), path(genome), path(id_map), path(review_fasta)
     path taxonomy_nodes
     path gene_origin_script
 
@@ -40,9 +40,10 @@ process GENE_ORIGIN_REPORT {
 
     script:
     def id_map_arg = id_map ? "--id-map \"${id_map}\"" : ''
+    def review_arg = review_fasta ? "--review-fasta \"${review_fasta}\"" : ''
     """
     python3 "$gene_origin_script" --sample "$sample" --method "$method" \\
-      --gff "$gff" --genome "$genome" --hits "$hits" --nodes "$taxonomy_nodes" $id_map_arg
+      --gff "$gff" --genome "$genome" --hits "$hits" --nodes "$taxonomy_nodes" $id_map_arg $review_arg
     """
 
     stub:

@@ -3,7 +3,9 @@ process HELIXER {
     label 'helixer'
     container params.helixer_container
     containerOptions params.helixer_container_options
-    publishDir "${params.outdir}/gene_prediction/helixer", mode: params.publish_dir_mode
+    // The GFF3 is published by RESTORE_PREDICTION_NAMES with the assembly's names
+    publishDir "${params.outdir}/gene_prediction/helixer", mode: params.publish_dir_mode,
+        saveAs: { fn -> fn.endsWith('.log') ? fn : null }
 
     input:
     tuple val(sample), path(genome), path(repeat_library), path(metadata)

@@ -5,7 +5,9 @@
 #   1. keeps the protein-coding genes of the Ensembl TAIR10 GFF3 on chromosomes 1-5,
 #   2. lifts them from TAIR10.1 onto the Col-0 assembly with Liftoff, because the
 #      assembly's coordinates differ from TAIR10,
-#   3. renames the lifted sequence IDs to the pipeline's ctg IDs (EDTA id map),
+#   3. renames the lifted sequence IDs to the pipeline's ctg IDs (EDTA id map) when the
+#      predictions still use them (runs before 2026-11-14); newer runs publish the
+#      assembly's own names, so the reference is used as lifted,
 #   4. compares coding structure (CDS only, UTRs ignored) of each method's
 #      predictions with gffcompare, and
 #   5. writes <results>/scoring/: per-method gffcompare output, a summary TSV and
@@ -19,7 +21,7 @@
 set -euo pipefail
 
 PROJECT_DIR=/mnt/cephfs/linuxhome/benucci/Meristem
-RESULTS=$(readlink -f "${1:-${PROJECT_DIR}/results/Col0-test-20261112}")
+RESULTS=$(readlink -f "${1:-${PROJECT_DIR}/results/Col0-test-20261115}")
 SAMPLE=${SAMPLE:-Col0}
 THREADS=${THREADS:-4}
 REF_FA=${REF_FA:-/mnt/cephfs/linuxhome/benucci/Canopy/benchmark_test/refs/arabidopsis/TAIR10.1_nuclear.fasta}
@@ -31,7 +33,7 @@ CACHE=${APPTAINER_IMAGE_CACHE:-/mnt/cephfs/linuxhome/benucci/.apptainer_cache}
 LIFTOFF_URI=docker://quay.io/biocontainers/liftoff:1.6.3--pyhdfd78af_2
 GFFCOMPARE_URI=docker://quay.io/biocontainers/gffcompare:0.12.10--h9948957_0
 
-for f in "$REF_FA" "$REF_GFF" "$TARGET_FA" "$ID_MAP"; do
+for f in "$REF_FA" "$REF_GFF" "$TARGET_FA"; do
     [[ -s "$f" ]] || { echo "Missing input: $f" >&2; exit 1; }
 done
 declare -A PRED
@@ -40,6 +42,15 @@ for m in braker4 helixer; do
     [[ -s "$g" ]] && PRED[$m]="$g"
 done
 (( ${#PRED[@]} > 0 )) || { echo "No predictions found under ${RESULTS}/gene_prediction" >&2; exit 1; }
+# Older runs published EDTA's short names (ctg000000001); rename the reference only then.
+first_seq=$(awk -F'\t' '!/^#/ && NF >= 9 {print $1; exit}' "${PRED[$(printf '%s\n' "${!PRED[@]}" | head -1)]}")
+if [[ "$first_seq" =~ ^ctg[0-9]{9}$ ]]; then
+    RENAME_REF=yes
+    [[ -s "$ID_MAP" ]] || { echo "Missing input: $ID_MAP" >&2; exit 1; }
+else
+    RENAME_REF=no
+fi
+echo "Predictions use ${first_seq}-style names; renaming the reference: ${RENAME_REF}"
 if [[ -e "$OUT" ]]; then
     echo "Scoring folder already exists: $OUT (move it away to rescore)" >&2
     exit 1
@@ -93,7 +104,7 @@ apptainer exec -B "$WORK" "$LIFTOFF_IMG" liftoff \
     -g ref.protein_coding.gff3 -o ref.lifted.gff3 -u ref.unmapped.txt \
     -p "$THREADS" -dir liftoff_intermediate target.fa ref.fa > liftoff.log 2>&1
 
-# 3 and 4. Rename sequences to ctg IDs and keep coding structure only: one
+# 3 and 4. Rename sequences to ctg IDs when needed, and keep coding structure only: one
 # transcript per mRNA, with its CDS segments as exons.
 cds_only() {  # cds_only <gff3> <rename: yes|no>
     python3 -I - "$1" "$ID_MAP" "$2" <<'PY'
@@ -124,7 +135,7 @@ with open(gff) as fh:
         print("\t".join(r))
 PY
 }
-cds_only ref.lifted.gff3 yes > reference.cds.gff3
+cds_only ref.lifted.gff3 "$RENAME_REF" > reference.cds.gff3
 for m in "${!PRED[@]}"; do
     cds_only "${PRED[$m]}" no > "${m}.cds.gff3"
     apptainer exec -B "$OUT" "$GFFCOMPARE_IMG" gffcompare \

@@ -2,7 +2,7 @@ process HELIXER_PROTEINS {
     tag "$sample"
     label 'busco'
     container params.busco_container
-    publishDir "${params.outdir}/gene_prediction/helixer", mode: params.publish_dir_mode
+    // Proteins and CDS are published by RESTORE_PREDICTION_NAMES with the assembly's names
 
     input:
     tuple val(sample), path(gff), path(genome), path(metadata)

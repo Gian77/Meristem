@@ -52,8 +52,8 @@ For each assembly in the samplesheet:
    recorded for sequences of at least `--min_contig_size` (5 kb). Nothing is removed.
 2. **Repeat discovery:** EDTA builds a transposable element library for the genome (`--step all`,
    `--anno 1`). EDTA needs short sequence names, so contigs are renamed `ctg000000001`, `ctg000000002`
-   and so on, and every later file uses those names. `repeats/edta/<sample>.edta_id_map.tsv` maps them
-   back to the original names.
+   and so on for every internal step. `repeats/edta/<sample>.edta_id_map.tsv` records the mapping, and
+   every published annotation and repeat file gets the original names back (step 7).
 3. **Soft masking:** RepeatMasker masks the genome with that library in lower case (`-xsmall`).
 
 **Gene prediction**
@@ -68,23 +68,27 @@ For each assembly in the samplesheet:
    BRAKER4 (see [Reproducibility](#reproducibility)).
 6. **Helixer:** ab initio prediction with the `land_plant` model. It needs no evidence. Its proteins are
    then translated from the gene models and the soft-masked genome.
-7. **Functional annotation (optional):** InterProScan (`--interproscan`) and eggNOG-mapper (`--eggnog`)
-   on the BRAKER4 proteins.
+7. **Original names and one protein per gene:** the GFF3, protein and CDS files of both methods, the
+   repeat annotation, the soft-masked genome and the RepeatMasker table are published with the
+   assembly's own sequence names. A one-protein-per-gene file (longest isoform) is added for each method.
+8. **Functional annotation (optional):** InterProScan (`--interproscan`) assigns protein domains and GO
+   terms to one protein per gene of both methods. eggNOG-mapper (`--eggnog`) runs on the BRAKER4
+   proteins.
 
 **Annotation QC**
 
-8. **BUSCO:** each method's proteins against `--busco_lineage` (odb10), offline from `--busco_db`.
-9. **Comparison:** gene, mRNA, exon and CDS counts, and BUSCO, side by side, when both methods run.
-10. **Gene origin check (optional, report only):** MMseqs2 searches each method's proteins against a
+9. **BUSCO:** each method's proteins against `--busco_lineage` (odb10), offline from `--busco_db`.
+10. **Comparison:** gene, mRNA, exon and CDS counts, and BUSCO, side by side, when both methods run.
+11. **Gene origin check (optional, report only):** MMseqs2 searches each method's proteins against a
     UniProt FASTA, and each contig is called from the taxonomy of its genes' best hits. See
     [Gene origin check](#gene-origin-check).
 
 **Reports and deliverables**
 
-11. **Reports:** per-method summaries, an analysis report (HTML, Markdown, DOCX and PDF) and MultiQC when
+12. **Reports:** per-method summaries, an analysis report (HTML, Markdown, DOCX and PDF) and MultiQC when
     both methods run with `--busco_db`, a tools guide, and a run manifest that records exactly what was
     used.
-12. **Deliverables:** after a successful run, two dated ZIP archives, one with every published file and
+13. **Deliverables:** after a successful run, two dated ZIP archives, one with every published file and
     one with the annotations and their QC.
 
 ## Workflow DAG
@@ -125,7 +129,7 @@ python3 docs/images/metro_header.py docs/images/meristem_metro.svg nextflow.conf
 
 | Parameter | Default | Notes |
 |---|---|---|
-| `--input` | required | CSV with `sample,assembly` columns. Sample names must be unique |
+| `--input` | required | CSV with `sample,assembly` columns, and optionally `canopy_flagged`. Sample names must be unique |
 | `--outdir` | `results` | Output directory |
 | `--proteins` | required for BRAKER4 | Protein evidence FASTA with unique, simple IDs |
 | `--busco_db` | none | Folder holding `lineages/<lineage>/`. Required for BRAKER4, and for BUSCO and the comparison report |
@@ -177,7 +181,9 @@ python3 docs/images/metro_header.py docs/images/meristem_metro.svg nextflow.conf
 |---|---|---|
 | `--gene_origin_db` | none | Protein FASTA with `OX=` taxon IDs in the headers, such as UniProt Swiss-Prot. Turns the check on |
 | `--gene_origin_taxonomy` | none | NCBI `nodes.dmp`. Required with `--gene_origin_db` |
-| `--interproscan` | `false` | InterProScan on BRAKER4 proteins. Needs `--interproscan_db` |
+| `--interproscan` | `false` | InterProScan on one protein per gene of both methods. Needs `--interproscan_db` |
+| `--interproscan_db` | none | Prepared InterProScan data folder of the same version as the container (see [Setup](#setup)) |
+| `--interproscan_container` | `docker://interpro/interproscan:5.75-106.0` | EBI's official image |
 | `--eggnog` | `false` | eggNOG-mapper on BRAKER4 proteins. Needs `--eggnog_db` |
 
 ### Resources and output
@@ -227,12 +233,15 @@ Meristem/
 The samplesheet can point to assemblies anywhere:
 
 ```csv
-sample,assembly
-F25101,/path/to/F25101_final.fasta
-F10702,/path/to/F10702_final.fasta
+sample,assembly,canopy_flagged
+F25101,/path/to/F25101_final.fasta,/path/to/F25101_full_flagged.fasta
+F10702,/path/to/F10702_final.fasta,
 ```
 
-Use absolute paths: a relative path is read from the directory Nextflow is launched in.
+Use absolute paths: a relative path is read from the directory Nextflow is launched in. The optional
+`canopy_flagged` column points to Canopy's `<sample>_full_flagged.fasta`; the
+[gene origin check](#gene-origin-check) then lists the genes on contigs Canopy kept for review. Leave it
+empty, or leave the column out, for other assemblies.
 
 ## Setup
 
@@ -325,6 +334,30 @@ for f in poales_odb10.2024-01-08 poales_odb12.2026-05-22; do
 done
 ```
 
+### InterProScan data (optional)
+
+InterProScan needs its data at exactly the version of the container (5.75-106.0), about 7 GB to download.
+Prepare it once; Meristem only reads it:
+
+```bash
+mkdir -p databases/interproscan && cd databases/interproscan
+URL=https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.75-106.0/alt
+curl -fsSLO "$URL/interproscan-data-5.75-106.0.tar.gz"
+curl -fsSLO "$URL/interproscan-data-5.75-106.0.tar.gz.md5"
+md5sum -c interproscan-data-5.75-106.0.tar.gz.md5
+tar -xzf interproscan-data-5.75-106.0.tar.gz
+# Index the HMM databases, once, with the same image
+apptainer exec -B "$PWD/interproscan-5.75-106.0/data:/opt/interproscan/data" \
+    docker://interpro/interproscan:5.75-106.0 \
+    bash -c 'cd /opt/interproscan && python3 setup.py -f interproscan.properties'
+```
+
+Then run with `--interproscan true --interproscan_db databases/interproscan/interproscan-5.75-106.0/data`.
+Meristem binds that folder to `/opt/interproscan/data` and runs with `-dp`, so no sequence or checksum is
+sent to EBI's lookup service. It does not use `-pa`: InterProScan's pathway option copies every MetaCyc
+and Reactome pathway linked to a domain family, in any organism (over 500 entries for one Col-0 helicase
+match), which made the output about 10 GB per proteome. It writes TSV and GFF3, not XML.
+
 ### Gene origin databases (optional)
 
 The check needs a protein FASTA whose headers carry `OX=<taxon id>`, such as
@@ -382,17 +415,18 @@ To run one method only, set `--run_braker4 false` or leave `--run_helixer` at `f
 
 ### All samples on HTCondor
 
-`run_annotation.submit` starts the Nextflow head job on the submit node (`universe = local`), and that job
-submits every task to the cluster. Edit `RUN_NAME`, `INPUT`, `OUTDIR`, `WORKDIR`, `PROTEINS` and
-`BUSCO_DB` at its top, add `NEW_RUN=true` to its `environment` line for a first run, and submit:
+`run_annotation.submit` is a template for one run. Its head job runs on the submit node
+(`universe = local`) and submits every task to the cluster. Copy it, set the values in its "Edit these"
+block (`RUN_NAME`, `INPUT`, proteins, BUSCO lineages, InterProScan), and submit:
 
 ```bash
+cp run_annotation.submit my_run.submit     # then edit the block at its top
 mkdir -p condor_logs
-condor_submit run_annotation.submit
+condor_submit my_run.submit
 condor_q
 ```
 
-The submit file runs both methods with protein clustering at 80% identity and 80% coverage. The script it
+The template runs both methods with protein clustering at 80% identity and 80% coverage, and InterProScan. The script it
 starts, `run_annotation_condor.sh`, turns on the gene origin check with the GLBRC shared databases and
 reads these environment variables, which the submit file's `environment` line sets:
 
@@ -407,6 +441,7 @@ reads these environment variables, which the submit file's `environment` line se
 | `HELIXER_MODEL` | config default | Another Helixer model |
 | `CLUSTER_PROTEINS`, `CLUSTER_MIN_SEQ_ID`, `CLUSTER_COVERAGE` | `false`, `0.90`, `0.80` | Protein clustering |
 | `RUN_GENE_ORIGIN` | `true` | Gene origin check. `GENE_ORIGIN_DB` and `GENE_ORIGIN_TAXONOMY` override its files |
+| `INTERPROSCAN`, `INTERPROSCAN_DB` | `false`, none | InterProScan and its prepared data folder |
 | `NEW_RUN` | `false` | Start a new session. Without it, a run with no recorded session stops |
 | `RESUME_SESSION` | none | Resume a specific Nextflow session |
 
@@ -460,7 +495,7 @@ assembly with Liftoff 1.6.3 (the assembly's coordinates differ from TAIR10), and
 structure (CDS only, UTRs ignored) with gffcompare 0.12.10. It writes `results/<RUN_NAME>/scoring/` and
 does not change the run's other outputs. It is a standalone check, not a pipeline step.
 
-Results of `Col0-test-20261112` (BRAKER4 `6a5ee16`, Helixer `land_plant_v0.3_a_0080`), against 27,284 of 27,420
+Results of `Col0-test-20261115` (BRAKER4 `6a5ee16`, Helixer `land_plant_v0.3_a_0080`), against 27,284 of 27,420
 reference genes that Liftoff placed:
 
 | Level (sensitivity / precision, %) | BRAKER4 | Helixer |
@@ -481,29 +516,32 @@ reference has 39,938 isoforms and neither method predicts most alternative ones.
 | Path | Contents |
 |---|---|
 | `assembly_qc/` | `<sample>.assembly.tsv`: sequence count, length, N50, gap bases |
-| `repeats/edta/` | EDTA library (`.EDTA.TElib.fa`), repeat annotation (`.EDTA.TEanno.gff3`), renamed genome and `<sample>.edta_id_map.tsv` |
+| `repeats/edta/` | EDTA library (`.EDTA.TElib.fa`), repeat annotation (`.EDTA.TEanno.gff3`) and `<sample>.edta_id_map.tsv` |
 | `repeats/masked/` | Soft-masked genome (`<sample>.softmasked.fa`) and RepeatMasker output |
-| `gene_prediction/braker4/` | `<sample>.braker4.gff3`, `.proteins.faa`, `.codingseq.fna`, the BRAKER4 log and `<sample>.braker4.compleasm.txt` |
-| `gene_prediction/helixer/` | `<sample>.helixer.gff3`, `.proteins.faa`, `.codingseq.fna` and the Helixer log |
+| `gene_prediction/braker4/` | `<sample>.braker4.gff3`, `.proteins.faa` (every isoform), `.primary_proteins.faa` (one per gene), `.codingseq.fna`, the BRAKER4 log and `<sample>.braker4.compleasm.txt` |
+| `gene_prediction/helixer/` | `<sample>.helixer.gff3`, `.proteins.faa`, `.primary_proteins.faa`, `.codingseq.fna` and the Helixer log |
 | `busco_comparison/` | BUSCO for each method and `<sample>.busco_annotation_comparison.tsv` |
 | `comparison/` | `<sample>.annotation_comparison.tsv`: feature counts by method |
 | `gene_origin/` | `<sample>.<method>.gene_origin.tsv` (one row per contig) and `.md` (summary) |
-| `functional/` | InterProScan and eggNOG-mapper results, when selected |
+| `functional/interproscan/` | `<sample>.<method>.interpro.tsv`, `.gff3`, and `.go.tsv` (GO terms per protein) |
+| `functional/eggnog/` | eggNOG-mapper results for BRAKER4, when selected |
 | `reports/<sample>/` | Per-method summaries and manifests, `<sample>_analysis_report.html`, interpretation, DOCX and PDF, MultiQC, and a ZIP of all of them |
 | `reports/pipeline_tools/` | Tools guide: purpose, inputs, outputs and limits of each tool |
 | `pipeline_info/` | `RUN_STATUS.md`, `RUN_MANIFEST.md`, `PIPELINE_SOURCE.sha256`, Nextflow report, timeline, trace and DAG |
 | `deliverables/` | `meristem_results_DD-MM-YYYY.zip` (everything published) and `meristem_annotations_DD-MM-YYYY.zip` (annotations and their QC), each with its own `README.md` |
 
-**Sequence names:** the GFF3 and FASTA files use EDTA's `ctg000000001` names, not the assembly's. Use
-`repeats/edta/<sample>.edta_id_map.tsv` to translate them. Gene IDs carry the sample name in both
-methods (`<sample>_g1` for BRAKER4, `<sample>_ctg000000001_000001` for Helixer).
+**Sequence names:** published files use the assembly's own sequence names, so they match the genome
+FASTA. Gene IDs carry the sample name in both methods: `<sample>_g1` for BRAKER4, and
+`<sample>_<sequence>_000001` for Helixer (`F25101_Chr01_000001`). Internal files in the work directory,
+and the gene origin table's `contig` column, use EDTA's short names; `original_id` gives the real one.
 
 The HTML reports are self-contained and readable offline, and they print to PDF from a browser. The
 deliverables archives leave out the input assemblies and shared databases, and a failed run gets none.
 
 As a guide, F25101 (about 665 Mb) took 33 hours on our cluster: EDTA 23 h, RepeatMasker 3 h, BRAKER4
 6.5 h, Helixer 4 h on CPU, and BUSCO 15 min per method. It produced 8 GB of results, 5.6 GB of it in the
-two archives, and 20 GB of work directory.
+two archives, and 20 GB of work directory. InterProScan adds 8–10 h per method on 16 CPUs and about
+22 GB of memory (measured on Col-0, about 30,000 proteins each), running in parallel with the rest.
 
 ## Reproducibility
 
@@ -540,11 +578,26 @@ optional check runs after gene prediction:
 
 1. MMseqs2 searches each method's proteins against `--gene_origin_db` (E-value 1e-5, best 5 hits).
 2. Each best hit is placed in a group (plant, bacteria, archaea, fungi, animal, other eukaryote, virus)
-   using `--gene_origin_taxonomy`.
+   using `--gene_origin_taxonomy`. Hits to Swiss-Prot entries of uncertain existence (`PE=5`) are
+   skipped, and the gene takes its best remaining hit: some are dubious ORFs inside rRNA genes, such as
+   ART2 in yeast 25S rDNA. The report gives the number of genes this affected.
 3. Each contig with genes is called from its hits. With fewer than 3 hits it is `too_few_hits`. Otherwise
    it is `bacterial_like` when at least half of its hits are prokaryotic (bacteria or archaea),
-   `plant_like` when at least half are Viridiplantae, and `mixed` when neither holds. Contigs without
-   genes are `no_genes`.
+   `fungal_like` when at least half are fungal, `animal_like` when at least half are animal,
+   `plant_like` when at least half are Viridiplantae, and `mixed` when none of these holds. Contigs
+   without genes are `no_genes`.
+4. With the `canopy_flagged` samplesheet column, the report also lists every contig Canopy kept in the
+   genome for review (`canopy_decision=review`), with Canopy's evidence taxon, its genes and their best
+   hits, whatever its call. It also marks kept contigs that Canopy labelled `Aniger` or `Rdelemar` as
+   likely rDNA (`canopy_rdna_label` column, and a note beside any such contig among the contigs to
+   review).
+
+**rDNA can look fungal.** Gene predictors call "genes" inside 45S rDNA arrays, and these hit small yeast
+ORFs that lie in or act on yeast rDNA (ART2, RRT15). On the *Arabidopsis* Col-0 test, BRAKER4's only
+foreign call was a 13.5 kb rDNA contig called `fungal_like`; Helixer had none. Canopy labels such contigs
+with the fungal reference they partly align to (`Aniger`, `Rdelemar`), and its release notes show that
+these are usually plant rDNA. The report marks them as likely rDNA but keeps the call, so users can
+apply their own screening.
 
 Nothing is removed from the annotation or the assembly. The report lists the contigs to review and how
 many genes would remain without them. A best hit is evidence, not proof: conserved proteins can have a
@@ -629,7 +682,7 @@ Every tool runs in a container pinned to an exact tag in `nextflow.config`. See
 | Helixer | `docker://gglyptodon/helixer-docker:helixer_v0.3.7_cuda_12.2.2-cudnn8_1` (digest `sha256:ed798e84…`) |
 | BUSCO | `quay.io/biocontainers/busco:5.8.0--pyhdfd78af_0` |
 | MultiQC and reports | `quay.io/biocontainers/multiqc:1.25.1--pyhdfd78af_0` |
-| InterProScan | `quay.io/biocontainers/interproscan:5.75-106.0--hdfd78af_0` |
+| InterProScan | `docker://interpro/interproscan:5.75-106.0` (EBI's image; BioContainers stops at 5.59) |
 | eggNOG-mapper | `quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0` |
 
 BRAKER4's Snakemake driver is the one part that runs outside a container, from the `.snakemake-env`
@@ -639,15 +692,14 @@ BioContainers tags.
 
 ## Known limitations
 
-- **Sequence names:** annotations use EDTA's `ctg…` names. Translate them with
-  `<sample>.edta_id_map.tsv` before comparing with other files that use the assembly's names.
 - **Short contigs:** BRAKER4 skips contigs under 10 kb, so a fragmented assembly loses genes there.
   Helixer annotates them.
 - **Protein evidence only:** Meristem runs BRAKER4 in EP mode. RNA-seq and Iso-Seq evidence, which BRAKER4
   supports, are not wired in.
 - **Full report needs both methods:** the comparison, MultiQC and the full analysis report need BRAKER4,
   Helixer and `--busco_db`.
-- **Functional annotation:** InterProScan and eggNOG-mapper only run on BRAKER4 proteins.
+- **Functional annotation:** InterProScan leaves out the member databases that need a separate licence
+  (SignalP, TMHMM, Phobius). eggNOG-mapper only runs on BRAKER4 proteins.
 - **Gene origin check is advisory:** it calls contigs from best hits and removes nothing.
 - **Helixer reruns** can differ slightly, because deterministic mode is off.
 - **BRAKER4 contig lengths:** BRAKER4 (including commit `6a5ee16`) counts each contig's length with line

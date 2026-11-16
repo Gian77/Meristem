@@ -11,6 +11,7 @@ include { CLUSTER_PROTEINS } from '../modules/local/cluster_proteins'
 include { INTERPROSCAN } from '../modules/local/interproscan'
 include { EGGNOG } from '../modules/local/eggnog'
 include { GENE_ORIGIN_SEARCH; GENE_ORIGIN_REPORT } from '../modules/local/gene_origin'
+include { RESTORE_PREDICTION_NAMES; RESTORE_REPEAT_NAMES } from '../modules/local/restore_names'
 include { ANNOTATION_BUSCO_COMPARISON; ANNOTATION_FINAL_REPORT; ANNOTATION_METHOD_REPORT; TOOLS_REPORT } from '../modules/local/reports'
 
 workflow ANNOTATION {
@@ -25,6 +26,8 @@ workflow ANNOTATION {
     gene_origin_db
     gene_origin_taxonomy
     gene_origin_script
+    restore_script
+    review_fastas
 
     main:
     def run_braker4 = params.run_braker4.toString().toBoolean()
@@ -40,7 +43,10 @@ workflow ANNOTATION {
     if (run_edta) {
         edta_out = EDTA_DISCOVERY(validated)
         repeats = edta_out.repeats
+        // EDTA's table of short (ctg000000001) to original sequence names, per sample
+        id_maps = edta_out.id_map.map { id_map -> tuple(id_map.name - '.edta_id_map.tsv', id_map) }
     } else {
+        id_maps = samples.map { sample, assembly -> tuple(sample, []) }
         repeats = validated.map { sample, assembly, metadata -> tuple(sample, assembly, file(params.repeatmasker_library ?: params.edta_db), metadata) }
     }
 
@@ -49,6 +55,17 @@ workflow ANNOTATION {
         masked = repeatmasker_out.masked
     } else {
         masked = repeats.map { sample, assembly, repeat_library, metadata -> tuple(sample, assembly, repeat_library, metadata) }
+    }
+
+    // Repeat files with the assembly's own sequence names. Only EDTA renames sequences.
+    if (run_edta) {
+        te_gffs = edta_out.edta_gff.map { gff -> tuple(gff.name - '.EDTA.TEanno.gff3', gff) }
+        repeat_files = run_repeatmasker
+            ? te_gffs
+                .join(repeatmasker_out.masked.map { sample, genome, repeat_library, metadata -> tuple(sample, genome) })
+                .join(repeatmasker_out.report.map { report -> tuple(report.name - '.repeatmasker.out', report) })
+            : te_gffs.map { sample, gff -> tuple(sample, gff, [], []) }
+        RESTORE_REPEAT_NAMES(repeat_files.join(id_maps), restore_script)
     }
     if (run_braker4 && params.cluster_proteins) {
         clustered_proteins = CLUSTER_PROTEINS(proteins, params.cluster_min_seq_id, params.cluster_coverage)
@@ -83,10 +100,30 @@ workflow ANNOTATION {
         helixer_with_genome = helixer_out.predictions.map { sample, gff, metadata -> tuple(sample, gff, metadata) }
             .join(masked.map { sample, genome, repeat_library, metadata -> tuple(sample, genome) })
             .map { sample, gff, metadata, genome -> tuple(sample, gff, genome, metadata) }
-        helixer_proteins = HELIXER_PROTEINS(helixer_with_genome)
+        helixer_protein_out = HELIXER_PROTEINS(helixer_with_genome)
+        helixer_proteins = helixer_protein_out
             .proteins
             .map { sample, protein_fasta, coding_fasta, metadata -> tuple(sample, 'helixer', protein_fasta, metadata) }
     }
+
+    // Published annotation files, with the assembly's own sequence names, and one
+    // protein per gene. Every other step keeps using the short-name files.
+    prediction_files = Channel.empty()
+    if (run_braker4) {
+        prediction_files = prediction_files.mix(
+            braker4_out.predictions.map { sample, gff, prediction_proteins, cds, metadata ->
+                tuple(sample, 'braker4', gff, prediction_proteins, cds)
+            }
+        )
+    }
+    if (run_helixer) {
+        prediction_files = prediction_files.mix(
+            helixer_gff
+                .join(helixer_protein_out.proteins.map { sample, protein_fasta, coding_fasta, metadata -> tuple(sample, protein_fasta, coding_fasta) })
+                .map { sample, gff, protein_fasta, coding_fasta -> tuple(sample, 'helixer', gff, protein_fasta, coding_fasta) }
+        )
+    }
+    restored = RESTORE_PREDICTION_NAMES(prediction_files.combine(id_maps, by: 0), restore_script)
 
     ANNOTATION_METHOD_REPORT(method_reports, report_renderer)
 
@@ -147,12 +184,11 @@ workflow ANNOTATION {
                     .map { sample, gff, protein_fasta -> tuple(sample, 'helixer', gff, protein_fasta) }
             )
         }
-        gene_origin_id_maps = run_edta
-            ? edta_out.id_map.map { id_map -> tuple(id_map.name - '.edta_id_map.tsv', id_map) }
-            : samples.map { sample, assembly -> tuple(sample, []) }
+        // Canopy's flagged FASTA (optional samplesheet column) lists contigs kept for review
         gene_origin_genomes = masked
             .map { sample, genome, repeat_library, metadata -> tuple(sample, genome) }
-            .join(gene_origin_id_maps)
+            .join(id_maps)
+            .join(review_fastas)
 
         gene_origin_search = GENE_ORIGIN_SEARCH(
             gene_origin_inputs.map { sample, method, gff, protein_fasta -> tuple(sample, method, protein_fasta) },
@@ -168,8 +204,9 @@ workflow ANNOTATION {
         )
     }
 
-    if (run_braker4 && run_interproscan) {
-        INTERPROSCAN(braker4_out.predictions)
+    // Functional annotation of both methods, one protein per gene
+    if (run_interproscan) {
+        INTERPROSCAN(restored.primary)
     }
     if (run_braker4 && run_eggnog) {
         EGGNOG(braker4_out.predictions)

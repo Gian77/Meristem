@@ -2,7 +2,9 @@ process BRAKER4 {
     tag "$sample"
     label 'braker4'
     container params.braker4_runner_container
-    publishDir "${params.outdir}/gene_prediction/braker4", mode: params.publish_dir_mode
+    // Annotation files are published by RESTORE_PREDICTION_NAMES with the assembly's names
+    publishDir "${params.outdir}/gene_prediction/braker4", mode: params.publish_dir_mode,
+        saveAs: { fn -> fn.endsWith('.log') || fn.endsWith('.compleasm.txt') ? fn : null }
 
     input:
     tuple val(sample), path(genome), path(repeat_library), path(metadata)
