@@ -25,8 +25,8 @@ def gene(contig, name, start, cds=1):
     return '\n'.join(rows) + '\n'
 
 
-def hit(name, taxid, bits=100, identity=60, pe=1):
-    return f'{name}.t1\tsp\t{identity}\t1\t1\t1e-20\t{bits}\tProtein OS=Thing OX={taxid} PE={pe} SV=1\n'
+def hit(name, taxid, bits=100, identity=60, pe=1, desc='Protein'):
+    return f'{name}.t1\tsp\t{identity}\t1\t1\t1e-20\t{bits}\t{desc} OS=Thing OX={taxid} PE={pe} SV=1\n'
 
 
 class GeneOriginTests(unittest.TestCase):
@@ -120,6 +120,23 @@ class GeneOriginTests(unittest.TestCase):
         self.assertEqual(table['bac']['hits'], '1')
         self.assertEqual(table['bac']['call'], 'too_few_hits')
         self.assertIn('Genes whose top hit was such an entry: 4;', summary)
+
+    def test_transposon_hits_are_ignored(self):
+        # Plant retrotransposon genes whose top hits are yeast or fly Gag-Pol proteins must not
+        # make the contig look foreign. Telomerase and RNase HII are host genes and still count.
+        gff = ''.join(gene('bac', f't{i}', 1 + 20 * i) for i in range(5))
+        hits = hit('t0', 5061, bits=200, desc='Transposon Ty3-I Gag-Pol polyprotein')
+        hits += hit('t1', 33208, bits=200, desc='Retrovirus-related Pol polyprotein from transposon opus')
+        hits += hit('t2', 33208, bits=200, desc='Copia protein')
+        hits += hit('t0', 3702, bits=50)
+        hits += hit('t3', 562, desc='Ribonuclease HII') + hit('t4', 5061, desc='Telomerase reverse transcriptase')
+        table, summary = self.run_check(gff, hits)
+        self.assertEqual(table['bac']['fungi'], '1')
+        self.assertEqual(table['bac']['animal'], '0')
+        self.assertEqual(table['bac']['bacteria'], '1')
+        self.assertEqual(table['bac']['plant'], '1')
+        self.assertEqual(table['bac']['call'], 'mixed')
+        self.assertIn('Genes whose top hit was a transposable-element protein: 3;', summary)
 
     def test_canopy_rdna_label_is_marked_not_removed(self):
         gff = ''.join(gene('bac', f'f{i}', 1 + 20 * i) for i in range(3))

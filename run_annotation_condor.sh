@@ -26,6 +26,9 @@ if [[ "${RUN_BRAKER4:-true}" == "true" ]]; then
     if [[ -n "${BRAKER4_BUSCO_LINEAGE:-}" ]]; then
         EXTRA_ARGS+=(--braker4_busco_lineage "${BRAKER4_BUSCO_LINEAGE}")
     fi
+else
+    # nextflow.config turns BRAKER4 on by default, so off must be passed explicitly.
+    EXTRA_ARGS+=(--run_braker4 false)
 fi
 if [[ "${RUN_HELIXER:-false}" == "true" ]]; then
     EXTRA_ARGS+=(--run_helixer true)
@@ -42,6 +45,12 @@ fi
 # InterProScan is opt-in. It reads the prepared data folder of its version without changing it.
 if [[ "${INTERPROSCAN:-false}" == "true" ]]; then
     EXTRA_ARGS+=(--interproscan true --interproscan_db "${INTERPROSCAN_DB:?Set INTERPROSCAN_DB to the prepared InterProScan data folder}")
+fi
+# Optional extra Nextflow options, split on spaces (no spaces inside values), e.g.
+# EXTRA_NF_ARGS="--run_edta false --repeatmasker_library /path/lib.fa". Unset changes nothing.
+if [[ -n "${EXTRA_NF_ARGS:-}" ]]; then
+    read -r -a extra_nf_args <<< "${EXTRA_NF_ARGS}"
+    EXTRA_ARGS+=("${extra_nf_args[@]}")
 fi
 # Resume this run's own session, never whichever session was launched last in
 # this directory. Condor restarts after an eviction find it the same way. Set

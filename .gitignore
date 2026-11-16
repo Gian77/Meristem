@@ -93,3 +93,5 @@ notes_archive_*.tar.gz
 
 # Pipeline tests
 tests/score_col0.submit
+tests/data/gene_origin_control.samplesheet.csv
+tests/gene_origin_control/

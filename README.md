@@ -444,6 +444,7 @@ reads these environment variables, which the submit file's `environment` line se
 | `INTERPROSCAN`, `INTERPROSCAN_DB` | `false`, none | InterProScan and its prepared data folder |
 | `NEW_RUN` | `false` | Start a new session. Without it, a run with no recorded session stops |
 | `RESUME_SESSION` | none | Resume a specific Nextflow session |
+| `EXTRA_NF_ARGS` | none | Extra Nextflow options, split on spaces, e.g. `--run_edta false --repeatmasker_library /path/lib.fa` |
 
 The launcher contains paths specific to our setup (`HOME`, the conda environment, the shared databases).
 Update them before using it elsewhere.
@@ -580,7 +581,10 @@ optional check runs after gene prediction:
 2. Each best hit is placed in a group (plant, bacteria, archaea, fungi, animal, other eukaryote, virus)
    using `--gene_origin_taxonomy`. Hits to Swiss-Prot entries of uncertain existence (`PE=5`) are
    skipped, and the gene takes its best remaining hit: some are dubious ORFs inside rRNA genes, such as
-   ART2 in yeast 25S rDNA. The report gives the number of genes this affected.
+   ART2 in yeast 25S rDNA. Hits to transposable-element proteins (Gag-Pol, reverse transcriptase other
+   than telomerase, integrase, transposase, RNase HI) are skipped the same way, because Swiss-Prot holds
+   few plant ones and plant retrotransposon genes would otherwise look fungal or animal. The report gives
+   the number of genes each rule affected.
 3. Each contig with genes is called from its hits. With fewer than 3 hits it is `too_few_hits`. Otherwise
    it is `bacterial_like` when at least half of its hits are prokaryotic (bacteria or archaea),
    `fungal_like` when at least half are fungal, `animal_like` when at least half are animal,
@@ -598,6 +602,13 @@ foreign call was a 13.5 kb rDNA contig called `fungal_like`; Helixer had none. C
 with the fungal reference they partly align to (`Aniger`, `Rdelemar`), and its release notes show that
 these are usually plant rDNA. The report marks them as likely rDNA but keeps the call, so users can
 apply their own screening.
+
+**Known-contamination control.** The check was tested on an assembly built from B11077 contigs that
+Canopy removed as fungal (30) or bacterial (15), plus rDNA-labelled (5) and plant (11) contigs, with the
+calls scored against that known origin. On the 2026-11-16 run, with the transposon
+filter, Helixer flagged 27/30 fungal and 14/15 bacterial contigs, BRAKER4 25/30 and 15/15; no plant
+control was flagged, and one rDNA contig was flagged by BRAKER4 and marked as likely rDNA. Without the
+filter BRAKER4 flagged 6 of the 11 plant controls, all through retrotransposon genes.
 
 Nothing is removed from the annotation or the assembly. The report lists the contigs to review and how
 many genes would remain without them. A best hit is evidence, not proof: conserved proteins can have a
