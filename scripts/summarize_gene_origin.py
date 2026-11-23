@@ -21,6 +21,12 @@ STRONG_IDENTITY = 70.0
 # Swiss-Prot protein existence level 5 ("uncertain") marks dubious ORFs. Some lie inside
 # rRNA genes (ART2_YEAST in yeast 25S rDNA), so plant rDNA would otherwise look fungal.
 UNCERTAIN = re.compile(r'\bPE=5\b')
+# Transposable-element proteins. Swiss-Prot has few plant ones, so plant retrotransposon genes
+# take their best hit from yeast, fly, worm or retrovirus Gag-Pol and look foreign. Their
+# taxonomy says nothing about where the contig came from (gene origin control test, 2026-11-16).
+TRANSPOSON = re.compile(r'transpos|retrovir|retroelement|gypsy|copia|Gag-Pol|Gag-Pro-Pol|Pro-Pol|'
+                        r'Pol polyprotein|Gag polyprotein|(?<!Telomerase )reverse transcriptase|'
+                        r'integrase|Ribonuclease HI\b|K02A2\.6', re.IGNORECASE)
 # Canopy evidence labels (fungal references in its screen) that mark plant rDNA arrays:
 # rRNA genes are conserved enough to align across kingdoms (Canopy release v6 notes).
 RDNA_LABELS = {'Aniger', 'Rdelemar'}
@@ -134,12 +140,13 @@ def read_genes(path):
 
 
 def read_best_hits(path, transcript_gene, parents):
-    """Return (gene->(kingdom, identity), uncertain_genes) from mmseqs rows.
+    """Return (gene->(kingdom, identity), set_aside) from mmseqs rows.
 
-    Each gene keeps its top-bitscore hit, ignoring hits to PE=5 (uncertain) entries.
-    uncertain_genes counts genes whose top hit overall was such an entry.
+    Each gene keeps its top-bitscore hit, ignoring hits to PE=5 (uncertain) entries and to
+    transposable-element proteins. set_aside counts genes whose top hit overall was such an
+    entry, as {'uncertain': n, 'transposon': n}.
     """
-    best, top_bits, top_uncertain, cache = {}, {}, {}, {}
+    best, top_bits, top_skip, cache = {}, {}, {}, {}
     rows = matched = 0
     with open(path) as handle:
         for line in handle:
@@ -151,10 +158,11 @@ def read_best_hits(path, transcript_gene, parents):
                 continue
             matched += 1
             bits = float(fields[6])
-            uncertain = bool(UNCERTAIN.search(fields[7]))
+            skip = ('uncertain' if UNCERTAIN.search(fields[7]) else
+                    'transposon' if TRANSPOSON.search(fields[7]) else None)
             if bits > top_bits.get(gene, float('-inf')):
-                top_bits[gene], top_uncertain[gene] = bits, uncertain
-            if uncertain or (gene in best and bits <= best[gene][0]):
+                top_bits[gene], top_skip[gene] = bits, skip
+            if skip or (gene in best and bits <= best[gene][0]):
                 continue
             taxid = re.search(r'\bOX=(\d+)', fields[7])
             kingdom = kingdom_of(taxid.group(1), parents, cache) if taxid else 'unclassified'
@@ -162,8 +170,9 @@ def read_best_hits(path, transcript_gene, parents):
     # A protein/GFF naming mismatch would otherwise report every gene as having no hit.
     if rows and not matched:
         sys.exit('No search hit matches a GFF3 transcript ID: proteins and GFF3 do not correspond')
-    uncertain_genes = sum(top_uncertain.values())
-    return {gene: (kingdom, identity) for gene, (_, kingdom, identity) in best.items()}, uncertain_genes
+    set_aside = Counter(reason for reason in top_skip.values() if reason)
+    set_aside = {'uncertain': set_aside['uncertain'], 'transposon': set_aside['transposon']}
+    return {gene: (kingdom, identity) for gene, (_, kingdom, identity) in best.items()}, set_aside
 
 
 def call_contig(row, min_hits, min_fraction):
@@ -207,7 +216,8 @@ def summarize(lengths, id_map, gene_contig, gene_cds, best, min_hits, min_fracti
     return table
 
 
-def write_outputs(table, sample, method, outdir, review=None, uncertain_genes=0):
+def write_outputs(table, sample, method, outdir, review=None, set_aside=None):
+    set_aside = set_aside or {'uncertain': 0, 'transposon': 0}
     columns = ['contig', 'original_id', 'length', 'genes', 'single_cds', 'hits', *KINGDOMS,
                'strong_bacterial', 'call', 'canopy_review', 'canopy_rdna_label']
     with open(Path(outdir) / f'{sample}.{method}.gene_origin.tsv', 'w') as out:
@@ -257,8 +267,15 @@ def write_outputs(table, sample, method, outdir, review=None, uncertain_genes=0)
               'plant sequence, so check whether they cluster before treating them as contamination.',
               '', 'Hits to Swiss-Prot entries of uncertain existence (PE=5) are ignored: some are '
               'dubious ORFs inside rRNA genes, such as ART2 in yeast 25S rDNA, and would make plant '
-              f'rDNA look fungal. Genes whose top hit was such an entry: {uncertain_genes}; they '
+              f"rDNA look fungal. Genes whose top hit was such an entry: {set_aside['uncertain']}; they "
               'take their best remaining hit, or none.',
+              '', 'Hits to transposable-element proteins (Gag-Pol, reverse transcriptase, integrase, '
+              'transposase and similar) are also ignored. Swiss-Prot holds few plant ones, so genes '
+              'predicted on plant retrotransposons take their best hit from yeast, insect, worm or '
+              'retrovirus elements and would make clean plant contigs look fungal or animal. Genes '
+              f"whose top hit was a transposable-element protein: {set_aside['transposon']}; they take "
+              'their best remaining hit, or none. Many of them are likely transposon genes rather '
+              'than host genes.',
               '', '## Contigs to review', '',
               'A contig is called foreign when at least half of its gene hits come from one non-plant '
               'group.', '']
@@ -324,11 +341,11 @@ def main():
     gene_contig, transcript_gene, gene_cds = read_genes(args.gff)
     if not gene_contig or not transcript_gene:
         sys.exit(f'No gene and transcript features found in {args.gff}')
-    best, uncertain_genes = read_best_hits(args.hits, transcript_gene, read_parents(args.nodes))
+    best, set_aside = read_best_hits(args.hits, transcript_gene, read_parents(args.nodes))
     review, rdna = read_canopy_labels(args.review_fasta) if args.review_fasta else (None, {})
     table = summarize(read_lengths(args.genome), read_id_map(args.id_map), gene_contig, gene_cds,
                       best, args.min_hits, args.min_fraction, review, rdna)
-    write_outputs(table, args.sample, args.method, args.outdir, review, uncertain_genes)
+    write_outputs(table, args.sample, args.method, args.outdir, review, set_aside)
 
 
 if __name__ == '__main__':

@@ -66,6 +66,10 @@ def feature_rows(rows):
     return {row.get("metric", "").lower(): row for row in rows if row.get("metric")}
 
 
+BUSCO_SCOPE = ("BUSCO counts conserved single-copy genes only, so it measures gene-space completeness, "
+               "not the accuracy of the whole gene set.")
+
+
 def interpretation(sample, lineage, assembly, busco, features, run_edta,
                    run_repeatmasker, run_interproscan, run_eggnog):
     total_length = number(assembly.get("total_length"))
@@ -160,15 +164,15 @@ def interpretation(sample, lineage, assembly, busco, features, run_edta,
             if braker_complete > helixer_complete and braker_missing < helixer_missing:
                 lines.append(
                     f"BRAKER4 has the stronger BUSCO result in this comparison: {braker_complete:.1f}% complete "
-                    f"versus {helixer_complete:.1f}% for Helixer, with fewer missing BUSCOs. Validate protein "
-                    "extraction and representative-isoform selection before interpreting this as a method difference."
+                    f"versus {helixer_complete:.1f}% for Helixer, and {braker_missing:.1f}% versus "
+                    f"{helixer_missing:.1f}% missing. " + BUSCO_SCOPE
                 )
             else:
                 if helixer_complete > braker_complete and helixer_missing < braker_missing:
                     lines.append(
                         f"Helixer has the stronger BUSCO result in this comparison: {helixer_complete:.1f}% complete "
-                        f"versus {braker_complete:.1f}% for BRAKER4, with fewer missing BUSCOs. Validate protein "
-                        "extraction and representative-isoform selection before interpreting this as a method difference."
+                        f"versus {braker_complete:.1f}% for BRAKER4, and {helixer_missing:.1f}% versus "
+                        f"{braker_missing:.1f}% missing. " + BUSCO_SCOPE
                     )
                 else:
                     lines.append(
@@ -191,24 +195,7 @@ def interpretation(sample, lineage, assembly, busco, features, run_edta,
     lines.extend(
         [
             "",
-            "## 5. Why the Helixer BUSCO result is low",
-            "",
-            "The reported Helixer result (37.2% complete, 12.1% fragmented, 50.8% missing) is not evidence "
-            "that the neural-network prediction itself is only 37% complete. The completed run translated "
-            "Helixer multi-exon CDS records by trimming the GFF3 phase at every CDS segment. In GFF3, phase "
-            "describes codon context at a junction; those bases are part of the coding sequence and must be "
-            "retained when CDS segments are concatenated. Trimming them can shift the reading frame repeatedly "
-            "and create artificial truncations or internal stops, which is consistent with the large BUSCO "
-            "drop relative to BRAKER4. The pipeline code has now been corrected, but this existing 37.2% result "
-            "must be treated as a pre-fix diagnostic until Helixer protein extraction and BUSCO are rerun.",
-            "",
-            "The comparison is also not fully independent: both methods used the same masked assembly, and BUSCO "
-            "is evaluated on selected protein translations. After the corrected rerun, inspect translated-protein "
-            "count, internal stops, protein-length distribution, and BUSCO results together. If Helixer remains "
-            "near 37% after the translation fix, investigate model/lineage suitability, assembly fragmentation, "
-            "and prediction sensitivity rather than accepting the current result as a biological conclusion.",
-            "",
-            "## 6. Functional annotation and next steps",
+            "## 5. Functional annotation and next steps",
             "",
             f"- **InterProScan:** {'enabled' if run_interproscan else 'not enabled'}",
             f"- **eggNOG:** {'enabled' if run_eggnog else 'not enabled'}",
@@ -218,7 +205,7 @@ def interpretation(sample, lineage, assembly, busco, features, run_edta,
             "annotation is accepted, functional annotation can be enabled as a separate opt-in stage. "
             "Do not treat a successful workflow status as proof that every biological quality criterion passed.",
             "",
-            "## 7. Readiness decision",
+            "## 6. Readiness decision",
             "",
             "This report does not decide whether the annotation is ready for release. That decision needs "
             "the assembly QC, repeat outputs, BUSCO summaries, and any gene origin results reviewed together "
