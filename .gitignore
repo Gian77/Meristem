@@ -95,3 +95,12 @@ notes_archive_*.tar.gz
 tests/score_col0.submit
 tests/data/gene_origin_control.samplesheet.csv
 tests/gene_origin_control/
+tests/annotation_checks/
+tests/reference_protein_check/
+tests/test_annotation_checks.py
+
+# Sorghum v6 release package and its tools (project-specific, kept local)
+release_sorghum_v6_annotation/
+release_sorghum_v6_annotation.tar.gz
+scripts/build_release.py
+scripts/pack_release.sh

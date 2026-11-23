@@ -27,6 +27,18 @@ class ReportTests(unittest.TestCase):
         busco['braker4'], busco['helixer'] = busco['helixer'], busco['braker4']
         self.assertIn('BRAKER4 has the stronger BUSCO result', self.interpretation(busco))
 
+    def test_busco_text_uses_only_this_runs_numbers(self):
+        # A fixed paragraph about an old run (Helixer 37.2%) once appeared in every report.
+        busco = {'braker4': {'complete_pct': '82.4', 'missing_pct': '14.8'},
+                 'helixer': {'complete_pct': '98.8', 'missing_pct': '0.8'}}
+        text = self.interpretation(busco)
+        self.assertIn('98.8% complete versus 82.4% for BRAKER4, and 0.8% versus 14.8% missing', text)
+        self.assertNotIn('37.2', text)
+        self.assertNotIn('Why the Helixer BUSCO result is low', text)
+        self.assertNotIn('Validate protein extraction', text)
+        headings = [line for line in text.splitlines() if line[:4] == '## ' and line[3].isdigit()]
+        self.assertEqual([h.split('.')[0] for h in headings], [f'## {i}' for i in range(1, len(headings) + 1)])
+
     def test_incomplete_measurements_do_not_become_zero_or_a_ranking(self):
         text = self.interpretation({'braker4': {'complete_pct': '', 'missing_pct': 'nan'}})
         self.assertIn('values are incomplete', text)

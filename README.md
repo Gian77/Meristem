@@ -801,3 +801,9 @@ results.
 | UniProt Swiss-Prot | Local copy | The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025. *Nucleic Acids Res* 2025;53:D609–D617. [doi:10.1093/nar/gkae1010](https://doi.org/10.1093/nar/gkae1010) |
 | NCBI taxonomy | `nodes.dmp` from the PlusPFP build | <https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/> |
 | *Arabidopsis* reference annotation (Col-0 test) | Ensembl Plants release 63, TAIR10 | `Arabidopsis_thaliana.TAIR10.63.gff3.gz` |
+
+
+## Funding
+
+This pipeline is based upon work supported by the Great Lakes Bioenergy Research Center, U.S. Department of
+Energy, Office of Science, Office of Biological and Environmental Research under award DE-SC0018409.
